@@ -23,3 +23,4 @@ export const SignifyTelephony = registerPlugin<SignifyTelephonyPluginInterface>(
 export const isNativeAndroid = (): boolean => {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 };
+

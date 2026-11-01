@@ -72,3 +72,4 @@ public class SignifyTelephonyPlugin extends Plugin {
         notifyListeners("callEnded", data);
     }
 }
+
