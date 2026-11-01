@@ -1,0 +1,49 @@
+name: Build Android APK (Signify SIM Telephony)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Native Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Build Web Application
+      run: npm run build
+
+    - name: Set up Java 21 (Temurin)
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: 'gradle'
+
+    - name: Grant Execute Permission to Gradle Wrapper
+      run: chmod +x android/gradlew
+
+    - name: Build Debug APK with Gradle
+      run: |
+        cd android
+        ./gradlew assembleDebug --stacktrace
+
+    - name: Upload Signify Debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: Signify-SIM-Telephony-APK
+        path: android/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 14

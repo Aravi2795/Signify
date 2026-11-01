@@ -11,6 +11,7 @@ import { SemanticProcessor } from '../services/semantic/SemanticProcessor';
 import { SignLanguageEngine } from '../services/sign/SignLanguageEngine';
 import { AvatarAnimationEngine } from '../services/avatar/AvatarAnimationEngine';
 import { CONVERSATION_SCENARIOS, type ConversationScenario } from '../mock/conversationScenarios';
+import { SignifyTelephony, isNativeAndroid } from '../services/telephony/AndroidTelephonyBridge';
 
 interface CallSessionContextType {
   session: CallSession;
@@ -220,6 +221,8 @@ export const CallSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, [session.status]);
 
+
+
   // Run scripted mock scenario
   const playScenario = useCallback((scenario: ConversationScenario) => {
     clearScenarioTimers();
@@ -294,7 +297,13 @@ export const CallSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         duration: 0
       }));
 
-      playScenario(currentScenario);
+      if (isNativeAndroid()) {
+        SignifyTelephony.answerCall().catch(console.warn);
+        sttServiceRef.current.startLiveMicCapture();
+        setIsMicActive(true);
+      } else {
+        playScenario(currentScenario);
+      }
     }, 900);
 
     scenarioTimersRef.current.push(connectTimer);
@@ -304,11 +313,16 @@ export const CallSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const declineCall = useCallback(() => {
     clearScenarioTimers();
     audioProviderRef.current.stop();
+    if (isNativeAndroid()) {
+      SignifyTelephony.endCall().catch(console.warn);
+    }
     setSession(prev => ({
       ...prev,
       status: 'ended'
     }));
   }, [clearScenarioTimers]);
+
+
 
   // End active call -> transition to summary
   const endCall = useCallback(() => {
@@ -317,6 +331,9 @@ export const CallSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     avatarEngineRef.current.clear();
     sttServiceRef.current.stopLiveMicCapture();
     setIsMicActive(false);
+    if (isNativeAndroid()) {
+      SignifyTelephony.endCall().catch(console.warn);
+    }
 
     setSession(prev => ({
       ...prev,
@@ -326,6 +343,58 @@ export const CallSessionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       currentPartialText: ''
     }));
   }, [clearScenarioTimers]);
+
+  // Listen to physical SIM card phone calls via Android InCallService
+  useEffect(() => {
+    if (!isNativeAndroid()) return;
+
+    let subIncoming: { remove: () => void } | null = null;
+    let subConnected: { remove: () => void } | null = null;
+    let subEnded: { remove: () => void } | null = null;
+
+    const setupListeners = async () => {
+      try {
+        subIncoming = await SignifyTelephony.addListener('incomingCall', (data) => {
+          clearScenarioTimers();
+          setSession(prev => ({
+            ...prev,
+            id: 'call_sim_' + Date.now(),
+            caller: {
+              name: 'Incoming SIM Call',
+              phoneNumber: data.phoneNumber || 'Unknown',
+              initials: 'SIM',
+              subtitle: 'CELLULAR PHONE CALL'
+            },
+            status: 'incoming',
+            mode: 'call',
+            duration: 0,
+            transcript: [],
+            currentPartialText: ''
+          }));
+        });
+
+        subConnected = await SignifyTelephony.addListener('callConnected', () => {
+          setSession(prev => ({ ...prev, status: 'connected' }));
+          sttServiceRef.current.startLiveMicCapture();
+          setIsMicActive(true);
+        });
+
+        subEnded = await SignifyTelephony.addListener('callEnded', () => {
+          endCall();
+        });
+      } catch (err) {
+        console.warn('Native telephony listeners setup failed:', err);
+      }
+    };
+
+    setupListeners();
+
+    return () => {
+      subIncoming?.remove();
+      subConnected?.remove();
+      subEnded?.remove();
+    };
+  }, [clearScenarioTimers, endCall]);
 
   // Restart call with a specific scenario
   const startCallWithScenario = useCallback((scenarioId: string) => {
