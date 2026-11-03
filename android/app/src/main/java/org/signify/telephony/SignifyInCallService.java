@@ -1,9 +1,10 @@
 package org.signify.telephony;
 
+import android.content.Intent;
+import android.net.Uri;
 import android.telecom.Call;
 import android.telecom.InCallService;
 import android.telecom.VideoProfile;
-import android.net.Uri;
 import android.util.Log;
 
 public class SignifyInCallService extends InCallService {
@@ -28,11 +29,25 @@ public class SignifyInCallService extends InCallService {
         instance = null;
     }
 
+    private void bringAppToFront() {
+        try {
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to bring MainActivity to front", e);
+        }
+    }
+
     @Override
     public void onCallAdded(Call call) {
         super.onCallAdded(call);
         this.currentCall = call;
         Log.d(TAG, "onCallAdded: " + call);
+
+        if (call.getState() == Call.STATE_RINGING) {
+            bringAppToFront();
+        }
 
         // Extract phone number from SIM call
         String phoneNumber = "Unknown";
@@ -47,6 +62,10 @@ public class SignifyInCallService extends InCallService {
             public void onStateChanged(Call call, int state) {
                 super.onStateChanged(call, state);
                 Log.d(TAG, "Call onStateChanged: " + state);
+
+                if (state == Call.STATE_RINGING) {
+                    bringAppToFront();
+                }
 
                 if (SignifyTelephonyPlugin.getInstance() != null) {
                     if (state == Call.STATE_RINGING) {
@@ -96,4 +115,3 @@ public class SignifyInCallService extends InCallService {
         return currentCall;
     }
 }
-

@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Copy, 
   Check, 
@@ -6,10 +6,12 @@ import {
   FileText, 
   Clock,
   Settings,
-  CheckCircle2
+  CheckCircle2,
+  PhoneCall
 } from 'lucide-react';
 import { useCallSession } from '../context/CallSessionContext';
 import type { TranscriptEntry } from '../types/call';
+import { isNativeAndroid, SignifyTelephony } from '../services/telephony/AndroidTelephonyBridge';
 
 interface CallSummaryScreenProps {
   onOpenSettings: () => void;
@@ -24,6 +26,31 @@ export const CallSummaryScreen: React.FC<CallSummaryScreenProps> = ({ onOpenSett
   } = useCallSession();
 
   const [copied, setCopied] = useState(false);
+  const [isDefaultDialer, setIsDefaultDialer] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (isNativeAndroid()) {
+      SignifyTelephony.checkDefaultDialer()
+        .then((res) => setIsDefaultDialer(res.isDefault))
+        .catch(() => setIsDefaultDialer(false));
+    }
+  }, []);
+
+  const handleRequestDefault = async () => {
+    if (isNativeAndroid()) {
+      try {
+        await SignifyTelephony.requestDefaultDialer();
+        setTimeout(async () => {
+          try {
+            const res = await SignifyTelephony.checkDefaultDialer();
+            setIsDefaultDialer(res.isDefault);
+          } catch (_) {}
+        }, 1500);
+      } catch (e) {
+        console.error('Failed to request default dialer', e);
+      }
+    }
+  };
 
   // Format call duration
   const formatTime = (secs: number) => {
@@ -63,6 +90,44 @@ export const CallSummaryScreen: React.FC<CallSummaryScreenProps> = ({ onOpenSett
           <Settings size={14} />
         </button>
       </div>
+
+      {/* Native Android Default Dialer Status Banner */}
+      {isNativeAndroid() && (
+        <div className="w-full shrink-0 mb-3">
+          {isDefaultDialer === false ? (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-left">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span className="text-xs font-bold text-amber-500 font-display">
+                  SIM Call Interception Inactive
+                </span>
+              </div>
+              <p className="text-[11px] text-secondary leading-tight mb-2 font-body">
+                Set Signify as your Default Phone App so incoming carrier calls ring with 3D sign translation.
+              </p>
+              <button
+                onClick={handleRequestDefault}
+                className="w-full py-2 px-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-black font-display text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow transition-all active:scale-98"
+              >
+                <PhoneCall size={13} />
+                <span>Set as Default Phone App</span>
+              </button>
+            </div>
+          ) : isDefaultDialer === true ? (
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-left flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-xs font-bold text-emerald-500 font-display">
+                  Live SIM Telephony Active
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full font-bold">
+                DEFAULT DIALER
+              </span>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* 2. Caller Identity Module */}
       <div className="flex flex-col items-center text-center my-auto w-full py-1">

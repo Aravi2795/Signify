@@ -2,6 +2,8 @@ import { registerPlugin, Capacitor } from '@capacitor/core';
 
 export interface SignifyTelephonyPluginInterface {
   isAvailable(): Promise<{ available: boolean; platform: string }>;
+  checkDefaultDialer(): Promise<{ isDefault: boolean }>;
+  requestDefaultDialer(): Promise<void>;
   answerCall(): Promise<void>;
   endCall(): Promise<void>;
   addListener(
@@ -23,4 +25,3 @@ export const SignifyTelephony = registerPlugin<SignifyTelephonyPluginInterface>(
 export const isNativeAndroid = (): boolean => {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 };
-
